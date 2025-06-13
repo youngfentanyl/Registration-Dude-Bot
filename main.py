@@ -39,7 +39,7 @@ async def summermajor2025(ctx):
 
     category = discord.utils.get(guild.categories, id=CATEGORY_ID)
     if not category:
-        await ctx.send("La catégorie spécifiée est introuvable.")
+        await ctx.send("Category not found.")
         return
 
     overwrites = {
@@ -73,9 +73,9 @@ async def summermajor2025(ctx):
     try:
         await ctx.message.delete()
     except discord.Forbidden:
-        print("Je n'ai pas la permission de supprimer les messages.")
+        print("Missing permission 'delete_messages'.")
     except discord.HTTPException as e:
-        print(f"Erreur lors de la suppression du message : {e}")
+        print(f"Cant delete messages : {e}")
 
 
 # Useless for now, will be activate again for next OFM
@@ -261,6 +261,61 @@ async def uptime(ctx):
         color=discord.Color.orange()
     )
     await ctx.send(embed=embed)
+    
+#delete all messages from a user in the 14 last days
+@bot.command(name="purge-user")
+@commands.has_permissions(manage_messages=True)
+async def purge_user(ctx, member: discord.Member):
+    confirm_msg = await ctx.send(
+        f"⚠️ Are you sure you want to delete **all messages** from {member.mention} in the server?\n"
+        "React with ✅ to confirm or ❌ to cancel."
+    )
+
+    await confirm_msg.add_reaction("✅")
+    await confirm_msg.add_reaction("❌")
+
+    def check(reaction, user):
+        return (
+            user == ctx.author and
+            str(reaction.emoji) in ["✅", "❌"] and
+            reaction.message.id == confirm_msg.id
+        )
+
+    try:
+        reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check)
+    except asyncio.TimeoutError:
+        await confirm_msg.edit(content="⏳ Timeout: purge cancelled.")
+        return
+
+    if str(reaction.emoji) == "❌":
+        await confirm_msg.edit(content="❌ Purge cancelled.")
+        return
+
+    # Purge confirmed
+    await confirm_msg.edit(content=f"🧹 Deleting messages from {member.display_name}...")
+
+    deleted_count = 0
+    error_count = 0
+
+    for channel in ctx.guild.text_channels:
+        if not channel.permissions_for(ctx.guild.me).read_message_history:
+            continue
+
+        try:
+            async for message in channel.history(limit=None):
+                if message.author == member:
+                    try:
+                        await message.delete()
+                        deleted_count += 1
+                    except discord.HTTPException:
+                        error_count += 1
+        except discord.Forbidden:
+            error_count += 1
+
+    await ctx.send(
+        f"✅ Done. Deleted {deleted_count} messages from **{member.display_name}**."
+        + (f" ⚠️ {error_count} messages couldn't be deleted." if error_count else "")
+    )
 
 def load_token(path="bot-token.txt"):
     with open(path, "r") as file:
