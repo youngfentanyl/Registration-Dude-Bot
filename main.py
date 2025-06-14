@@ -131,7 +131,6 @@ async def register(ctx, *, args: str):
         await ctx.send("Please separate the two players with a comma `,`.")
         return
 
-  #is useless for now because of l.126, will be used for the next ofm
     team_count += 1
     save_counter(team_count)
 
@@ -146,6 +145,7 @@ async def register(ctx, *, args: str):
         color=discord.Color.green()
     )
 
+    # Envoi dans le channel d'enregistrement
     registration_channel = ctx.guild.get_channel(TEAM_REGISTRATION_CHANNEL_ID)
     if registration_channel:
         await registration_channel.send(embed=embed)
@@ -153,12 +153,22 @@ async def register(ctx, *, args: str):
     else:
         await ctx.send("❌ Registration channel not found.")
 
+    role_id = 1371850893074501713
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("⚠️ Registration complete, but the role could not be found.")
+        return
 
-# for the permission error
-@register.error
-async def register_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send(f"{ctx.author.mention} You need the **Manage Messages** permission to use this command.")
+    mentions = ctx.message.mentions
+    if mentions:
+        for user in mentions:
+            try:
+                await user.add_roles(role)
+                await ctx.send(f"✅ {user.mention} has been given the role.")
+            except discord.Forbidden:
+                await ctx.send(f"❌ I don't have permission to give the role to {user.mention}.")
+    else:
+        await ctx.send("⚠️ No users were mentioned directly, so no roles were assigned.")
 
 # only usable in #staff-commands channel
 @bot.command()
