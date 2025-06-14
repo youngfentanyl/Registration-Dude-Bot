@@ -3,6 +3,19 @@ from discord.ext import commands
 import json
 import os
 import re
+from flask import Flask
+import threading
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!", 200
+
+def run():
+    app.run(host='0.0.0.0', port=8080)
+
+threading.Thread(target=run).start()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -153,7 +166,7 @@ async def copy(ctx, emoji_input: str):
     if ctx.channel.id != 1356604820345196574:
         await ctx.send(f"{ctx.author.mention} You can only use this command in <#{1356604820345196574}>.")
         return
-        
+
     match = re.match(r"<a?:([a-zA-Z0-9_]+):(\d+)>", emoji_input)
     if match:
         emoji_name = match.group(1)
@@ -261,8 +274,8 @@ async def uptime(ctx):
         color=discord.Color.orange()
     )
     await ctx.send(embed=embed)
-    
-#delete all messages from a user in the 14 last days
+
+# Command to delete all messages from a specific user in the server
 @bot.command(name="purge-user")
 @commands.has_permissions(manage_messages=True)
 async def purge_user(ctx, member: discord.Member):
@@ -316,6 +329,58 @@ async def purge_user(ctx, member: discord.Member):
         f"✅ Done. Deleted {deleted_count} messages from **{member.display_name}**."
         + (f" ⚠️ {error_count} messages couldn't be deleted." if error_count else "")
     )
+
+@bot.command(name="roleregistration")
+@commands.has_permissions(manage_roles=True)
+async def roleregistration(ctx, role_id: int, member_ids: str):
+    guild = ctx.guild
+    role = guild.get_role(role_id)
+
+    if not role:
+        await ctx.send("❌ Invalid role ID.")
+        return
+
+    member_ids_list = [mid.strip() for mid in member_ids.split(",") if mid.strip().isdigit()]
+    if not member_ids_list:
+        await ctx.send("❌ Please provide valid user IDs.")
+        return
+
+    added_members = []
+    failed_members = []
+
+    for member_id in member_ids_list:
+        member = guild.get_member(int(member_id))
+        if not member:
+            failed_members.append(f"<@{member_id}> *(not found)*")
+            continue
+
+        try:
+            await member.add_roles(role, reason=f"Role registration by {ctx.author}")
+            added_members.append(member.mention)
+        except discord.Forbidden:
+            failed_members.append(f"{member.mention} *(permission denied)*")
+        except discord.HTTPException:
+            failed_members.append(f"{member.mention} *(failed)*")
+
+    embed = discord.Embed(
+        title="📌 Role Registration",
+        color=discord.Color.green()
+    )
+
+    if added_members:
+        embed.add_field(name="✅ Role added to:", value="\n".join(added_members), inline=False)
+    if failed_members:
+        embed.add_field(name="⚠️ Failed to add role to:", value="\n".join(failed_members), inline=False)
+
+    await ctx.send(embed=embed)
+
+@roleregistration.error
+async def roleregistration_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You need the **Manage Roles** permission to use this command.")
+    else:
+        await ctx.send("❌ An error occurred. Please check your command syntax.")
+
 
 def load_token(path="bot-token.txt"):
     with open(path, "r") as file:
