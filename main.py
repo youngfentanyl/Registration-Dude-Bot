@@ -27,6 +27,8 @@ CATEGORY_ID = 1356360895575359730
 ALLOWED_CHANNEL_ID = 1372625086938480864
 TEAM_REGISTRATION_CHANNEL_ID = 1382386828136550460
 COUNTER_FILE = "counter.json"
+STATUS_CHANNEL_ID = 1383509707179692082
+THUMBNAIL_URL = "https://media.discordapp.net/attachments/929062786481414155/1383510435386490960/file_00000000d5e061f588c0f68ad2f70c2c.png?ex=684f0e00&is=684dbc80&hm=516b2eb4487602088f9c93ece51ba26045bf328fe07c5c89d192d0aaf55323e8&=&format=webp&quality=lossless&width=859&height=859"
 
 
 @bot.event
@@ -390,6 +392,59 @@ async def roleregistration_error(ctx, error):
         await ctx.send("❌ You need the **Manage Roles** permission to use this command.")
     else:
         await ctx.send("❌ An error occurred. Please check your command syntax.")
+
+    #command r!online and r!offline to indicate if you're playing or not
+@bot.command()
+async def online(ctx, flag: str = None):
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+    embed = discord.Embed(
+        title="**OpenFront**",
+        description=f"{ctx.author.mention}",
+        color=discord.Color.green()
+    )
+    embed.add_field(name="STATUS", value="🟢 ONLINE", inline=False)
+
+    if flag and len(flag) <= 5:
+        embed.add_field(name="Language", value=flag.upper(), inline=False)
+
+    embed.set_footer(text="OpenFront Masters Competitive League")
+    embed.set_thumbnail(url=THUMBNAIL_URL)
+
+    for channel in ctx.guild.text_channels:
+        if channel.id == STATUS_CHANNEL_ID:
+            await channel.send(embed=embed)
+            return
+
+    print(f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur.")
+
+
+@bot.command()
+async def offline(ctx):
+    try:
+        await ctx.message.delete()
+    except discord.Forbidden:
+        pass
+
+    embed = discord.Embed(
+        title="**OpenFront**",
+        description=f"{ctx.author.mention}",
+        color=discord.Color.red()
+    )
+    embed.add_field(name="STATUS", value="🔴 OFFLINE", inline=False)
+
+    embed.set_footer(text="OpenFront Masters Competitive League")
+    embed.set_thumbnail(url=THUMBNAIL_URL)
+
+    for channel in ctx.guild.text_channels:
+        if channel.id == STATUS_CHANNEL_ID:
+            await channel.send(embed=embed)
+            return
+
+    print(f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur.")
 
 
 def load_token(path="bot-token.txt"):
