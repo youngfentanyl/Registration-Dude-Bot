@@ -38,7 +38,7 @@ async def on_ready():
 # checks if the bot is online
 @bot.command()
 async def ping(ctx):
-    await ctx.send('Im alive!')
+    await ctx.send('CHAMPAGNE!')
 
 # will be added soon to open tickets
 @bot.command()
