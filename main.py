@@ -3,17 +3,21 @@ from discord.ext import commands
 import json
 import os
 import re
+import random
 from flask import Flask
 import threading
 
 app = Flask('')
 
+
 @app.route('/')
 def home():
     return "Bot is alive!", 200
 
+
 def run():
     app.run(host='0.0.0.0', port=8080)
+
 
 threading.Thread(target=run).start()
 
@@ -35,10 +39,16 @@ THUMBNAIL_URL = "https://media.discordapp.net/attachments/929062786481414155/138
 async def on_ready():
     print(f'Connecté en tant que {bot.user}!')
 
+
 # checks if the bot is online
-@bot.command()
+@bot.command(name="ping")
 async def ping(ctx):
-    await ctx.send('CHAMPAGNE!')
+    ping_value = random.randint(20, 100)
+    embed = discord.Embed(title="BBNO$#9291 Actual Ping",
+                          description=f"Here's my ping:\n`{ping_value} ms`",
+                          color=discord.Color.blue())
+    await ctx.send(embed=embed)
+
 
 # will be added soon to open tickets
 @bot.command()
@@ -95,6 +105,7 @@ async def summermajor2025(ctx):
 
 # Useless for now, will be activate again for next OFM
 
+
 def load_counter():
     if not os.path.exists(COUNTER_FILE):
         return 0
@@ -108,7 +119,8 @@ def save_counter(count):
         json.dump({"team_count": count}, f)
 
 
-team_count = load_counter() 
+team_count = load_counter()
+
 
 # for the automatic registration, read l.108 to understand how it works
 @bot.command()
@@ -119,7 +131,9 @@ async def register(ctx, *, args: str):
     pattern = r"^(.*?)\/(.*?)\/(.*?)\/(.*?)$"
     match = re.match(pattern, args)
     if not match:
-        await ctx.send("Invalid Format. Use : `r!register Team Name/Tag/Nickname1, Nickname2/Substitue`")
+        await ctx.send(
+            "Invalid Format. Use : `r!register Team Name/Tag/Nickname1, Nickname2/Substitue`"
+        )
         return
 
     team_name = match.group(1).strip()
@@ -136,16 +150,12 @@ async def register(ctx, *, args: str):
     team_count += 1
     save_counter(team_count)
 
-    embed = discord.Embed(
-        title="Registration",
-        description=(
-            f"**Name:** {team_name}\n"
-            f"**Tag:** {team_tag}\n"
-            f"**Players:** {player1}, {player2}\n"
-            f"**Substitue:** {substitue}"
-        ),
-        color=discord.Color.green()
-    )
+    embed = discord.Embed(title="Registration",
+                          description=(f"**Name:** {team_name}\n"
+                                       f"**Tag:** {team_tag}\n"
+                                       f"**Players:** {player1}, {player2}\n"
+                                       f"**Substitue:** {substitue}"),
+                          color=discord.Color.green())
 
     # Envoi dans le channel d'enregistrement
     registration_channel = ctx.guild.get_channel(TEAM_REGISTRATION_CHANNEL_ID)
@@ -158,7 +168,8 @@ async def register(ctx, *, args: str):
     role_id = 1371850893074501713
     role = ctx.guild.get_role(role_id)
     if not role:
-        await ctx.send("⚠️ Registration complete, but the role could not be found.")
+        await ctx.send(
+            "⚠️ Registration complete, but the role could not be found.")
         return
 
     mentions = ctx.message.mentions
@@ -168,15 +179,21 @@ async def register(ctx, *, args: str):
                 await user.add_roles(role)
                 await ctx.send(f"✅ {user.mention} has been given the role.")
             except discord.Forbidden:
-                await ctx.send(f"❌ I don't have permission to give the role to {user.mention}.")
+                await ctx.send(
+                    f"❌ I don't have permission to give the role to {user.mention}."
+                )
     else:
-        await ctx.send("⚠️ No users were mentioned directly, so no roles were assigned.")
+        await ctx.send(
+            "⚠️ No users were mentioned directly, so no roles were assigned.")
+
 
 # only usable in #staff-commands channel
 @bot.command()
 async def copy(ctx, emoji_input: str):
     if ctx.channel.id != 1356604820345196574:
-        await ctx.send(f"{ctx.author.mention} You can only use this command in <#{1356604820345196574}>.")
+        await ctx.send(
+            f"{ctx.author.mention} You can only use this command in <#{1356604820345196574}>."
+        )
         return
 
     match = re.match(r"<a?:([a-zA-Z0-9_]+):(\d+)>", emoji_input)
@@ -190,7 +207,9 @@ async def copy(ctx, emoji_input: str):
             emoji_name = f"emoji_{emoji_id}"
             is_animated = False
         else:
-            await ctx.send("❌ Invalid emoji format. Provide a custom emoji or a numeric emoji ID.")
+            await ctx.send(
+                "❌ Invalid emoji format. Provide a custom emoji or a numeric emoji ID."
+            )
             return
 
     for ext in ("png", "gif"):
@@ -201,16 +220,23 @@ async def copy(ctx, emoji_input: str):
                 extension = ext
                 break
     else:
-        await ctx.send("❌ Could not fetch the emoji from Discord CDN. Make sure it's a valid emoji ID.")
+        await ctx.send(
+            "❌ Could not fetch the emoji from Discord CDN. Make sure it's a valid emoji ID."
+        )
         return
 
     try:
-        new_emoji = await ctx.guild.create_custom_emoji(name=emoji_name, image=image_data)
-        await ctx.send(f"✅ Emoji `{new_emoji.name}` added successfully! {new_emoji}")
+        new_emoji = await ctx.guild.create_custom_emoji(name=emoji_name,
+                                                        image=image_data)
+        await ctx.send(
+            f"✅ Emoji `{new_emoji.name}` added successfully! {new_emoji}")
     except discord.Forbidden:
-        await ctx.send("❌ I don't have permission to add emojis. Make sure I have **Manage Emojis** permission.")
+        await ctx.send(
+            "❌ I don't have permission to add emojis. Make sure I have **Manage Emojis** permission."
+        )
     except discord.HTTPException as e:
         await ctx.send(f"❌ Failed to add emoji: {str(e)}")
+
 
 #Command to change the channel #people-in-charge
 @bot.command()
@@ -220,7 +246,9 @@ async def chargeupdate(ctx):
     thread_id = 1372602073014866061
 
     if ctx.channel.id != allowed_channel_id:
-        await ctx.send(f"{ctx.author.mention} This command can only be used in <#{allowed_channel_id}>.")
+        await ctx.send(
+            f"{ctx.author.mention} This command can only be used in <#{allowed_channel_id}>."
+        )
         return
 
     guild = ctx.guild
@@ -244,7 +272,8 @@ async def chargeupdate(ctx):
             continue
 
         members = []
-        for member in sorted(role.members, key=lambda m: m.display_name.lower()):
+        for member in sorted(role.members,
+                             key=lambda m: m.display_name.lower()):
             if member.id not in seen_members:
                 members.append(member.display_name)
                 seen_members.add(member.id)
@@ -253,15 +282,12 @@ async def chargeupdate(ctx):
 
     embed = discord.Embed(
         title="📋 People in charge of OpenFront Masters Competitive League",
-        color=discord.Color.blue()
-    )
+        color=discord.Color.blue())
 
     for role_name, members in role_to_members.items():
-        embed.add_field(
-            name=role_name,
-            value="\n".join(f"- {name}" for name in members),
-            inline=False
-        )
+        embed.add_field(name=role_name,
+                        value="\n".join(f"- {name}" for name in members),
+                        inline=False)
 
     try:
         thread = discord.utils.get(ctx.channel.threads, id=thread_id)
@@ -274,6 +300,7 @@ async def chargeupdate(ctx):
     except discord.Forbidden:
         await ctx.send("❌ I don't have permission to access the thread.")
 
+
 @bot.command()
 async def uptime(ctx):
     embed = discord.Embed(
@@ -281,11 +308,10 @@ async def uptime(ctx):
         description=(
             "I'm online every day from **1PM to 11PM (French time)**.\n"
             "My commands only work during these hours.\n\n"
-            "Outside of those hours, I might be sleeping 😴"
-        ),
-        color=discord.Color.orange()
-    )
+            "Outside of those hours, I might be sleeping 😴"),
+        color=discord.Color.orange())
     await ctx.send(embed=embed)
+
 
 # Command to delete all messages from a specific user in the server
 @bot.command(name="purge-user")
@@ -293,21 +319,19 @@ async def uptime(ctx):
 async def purge_user(ctx, member: discord.Member):
     confirm_msg = await ctx.send(
         f"⚠️ Are you sure you want to delete **all messages** from {member.mention} in the server?\n"
-        "React with ✅ to confirm or ❌ to cancel."
-    )
+        "React with ✅ to confirm or ❌ to cancel.")
 
     await confirm_msg.add_reaction("✅")
     await confirm_msg.add_reaction("❌")
 
     def check(reaction, user):
-        return (
-            user == ctx.author and
-            str(reaction.emoji) in ["✅", "❌"] and
-            reaction.message.id == confirm_msg.id
-        )
+        return (user == ctx.author and str(reaction.emoji) in ["✅", "❌"]
+                and reaction.message.id == confirm_msg.id)
 
     try:
-        reaction, user = await bot.wait_for("reaction_add", timeout=30.0, check=check)
+        reaction, user = await bot.wait_for("reaction_add",
+                                            timeout=30.0,
+                                            check=check)
     except asyncio.TimeoutError:
         await confirm_msg.edit(content="⏳ Timeout: purge cancelled.")
         return
@@ -317,7 +341,8 @@ async def purge_user(ctx, member: discord.Member):
         return
 
     # Purge confirmed
-    await confirm_msg.edit(content=f"🧹 Deleting messages from {member.display_name}...")
+    await confirm_msg.edit(
+        content=f"🧹 Deleting messages from {member.display_name}...")
 
     deleted_count = 0
     error_count = 0
@@ -339,8 +364,9 @@ async def purge_user(ctx, member: discord.Member):
 
     await ctx.send(
         f"✅ Done. Deleted {deleted_count} messages from **{member.display_name}**."
-        + (f" ⚠️ {error_count} messages couldn't be deleted." if error_count else "")
-    )
+        + (f" ⚠️ {error_count} messages couldn't be deleted."
+           if error_count else ""))
+
 
 @bot.command(name="roleregistration")
 @commands.has_permissions(manage_roles=True)
@@ -352,7 +378,9 @@ async def roleregistration(ctx, role_id: int, member_ids: str):
         await ctx.send("❌ Invalid role ID.")
         return
 
-    member_ids_list = [mid.strip() for mid in member_ids.split(",") if mid.strip().isdigit()]
+    member_ids_list = [
+        mid.strip() for mid in member_ids.split(",") if mid.strip().isdigit()
+    ]
     if not member_ids_list:
         await ctx.send("❌ Please provide valid user IDs.")
         return
@@ -367,31 +395,38 @@ async def roleregistration(ctx, role_id: int, member_ids: str):
             continue
 
         try:
-            await member.add_roles(role, reason=f"Role registration by {ctx.author}")
+            await member.add_roles(role,
+                                   reason=f"Role registration by {ctx.author}")
             added_members.append(member.mention)
         except discord.Forbidden:
             failed_members.append(f"{member.mention} *(permission denied)*")
         except discord.HTTPException:
             failed_members.append(f"{member.mention} *(failed)*")
 
-    embed = discord.Embed(
-        title="📌 Role Registration",
-        color=discord.Color.green()
-    )
+    embed = discord.Embed(title="📌 Role Registration",
+                          color=discord.Color.green())
 
     if added_members:
-        embed.add_field(name="✅ Role added to:", value="\n".join(added_members), inline=False)
+        embed.add_field(name="✅ Role added to:",
+                        value="\n".join(added_members),
+                        inline=False)
     if failed_members:
-        embed.add_field(name="⚠️ Failed to add role to:", value="\n".join(failed_members), inline=False)
+        embed.add_field(name="⚠️ Failed to add role to:",
+                        value="\n".join(failed_members),
+                        inline=False)
 
     await ctx.send(embed=embed)
+
 
 @roleregistration.error
 async def roleregistration_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ You need the **Manage Roles** permission to use this command.")
+        await ctx.send(
+            "❌ You need the **Manage Roles** permission to use this command.")
     else:
-        await ctx.send("❌ An error occurred. Please check your command syntax.")
+        await ctx.send("❌ An error occurred. Please check your command syntax."
+                       )
+
 
     #command r!online and r!offline to indicate if you're playing or not
 @bot.command()
@@ -401,11 +436,9 @@ async def online(ctx, flag: str = None):
     except discord.Forbidden:
         pass
 
-    embed = discord.Embed(
-        title="**OpenFront**",
-        description=f"{ctx.author.mention}",
-        color=discord.Color.green()
-    )
+    embed = discord.Embed(title="**OpenFront**",
+                          description=f"{ctx.author.mention}",
+                          color=discord.Color.green())
     embed.add_field(name="STATUS", value="🟢 ONLINE", inline=False)
 
     if flag and len(flag) <= 5:
@@ -419,7 +452,9 @@ async def online(ctx, flag: str = None):
             await channel.send(embed=embed)
             return
 
-    print(f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur.")
+    print(
+        f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
+    )
 
 
 @bot.command()
@@ -429,11 +464,9 @@ async def offline(ctx):
     except discord.Forbidden:
         pass
 
-    embed = discord.Embed(
-        title="**OpenFront**",
-        description=f"{ctx.author.mention}",
-        color=discord.Color.red()
-    )
+    embed = discord.Embed(title="**OpenFront**",
+                          description=f"{ctx.author.mention}",
+                          color=discord.Color.red())
     embed.add_field(name="STATUS", value="🔴 OFFLINE", inline=False)
 
     embed.set_footer(text="OpenFront Masters Competitive League")
@@ -444,7 +477,9 @@ async def offline(ctx):
             await channel.send(embed=embed)
             return
 
-    print(f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur.")
+    print(
+        f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
+    )
 
 
 def load_token(path="bot-token.txt"):
