@@ -38,6 +38,14 @@ THUMBNAIL_URL = "https://media.discordapp.net/attachments/929062786481414155/138
 @bot.event
 async def on_ready():
     print(f'Connecté en tant que {bot.user}!')
+    await bot.change_presence(
+        status=discord.Status.dnd,
+        activity=discord.Streaming(
+            name="OpenFront.io",
+            url="https://www.twitch.tv/directory/category/openfront"
+            )
+        )
+
 
 
 # checks if the bot is online
@@ -367,7 +375,7 @@ async def purge_user(ctx, member: discord.Member):
         + (f" ⚠️ {error_count} messages couldn't be deleted."
            if error_count else ""))
 
-
+#give a role to multiple users at once
 @bot.command(name="roleregistration")
 @commands.has_permissions(manage_roles=True)
 async def roleregistration(ctx, role_id: int, member_ids: str):
@@ -456,7 +464,7 @@ async def online(ctx, flag: str = None):
         f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
     )
 
-
+#read l.439 to understand how it works
 @bot.command()
 async def offline(ctx):
     try:
@@ -481,13 +489,7 @@ async def offline(ctx):
         f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
     )
 
-    import discord
-    from discord.ext import commands
-
-    intents = discord.Intents.default()
-    intents.members = True  # Nécessaire pour accéder aux membres
-    bot = commands.Bot(command_prefix='r!', intents=intents)
-
+    #command to get all members with a specific role
     @bot.command()
     async def getrole(ctx, role_id: int):
         if not ctx.author.guild_permissions.manage_roles:
