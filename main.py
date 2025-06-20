@@ -481,6 +481,34 @@ async def offline(ctx):
         f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
     )
 
+@bot.command()
+async def getrole(ctx, role_id: int):
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        return await ctx.send("❌ Rôle introuvable.")
+
+    members = [member for member in ctx.guild.members if role in member.roles]
+
+    if not members:
+        return await ctx.send("❌ Aucun membre ne possède ce rôle.")
+
+    # Diviser les membres en groupes de 40
+    chunk_size = 40
+    chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
+
+    preparing_msg = await ctx.send(f"⏳ Preparing {len(chunks)} embed{'s' if len(chunks) > 1 else ''}...")
+
+    for i, chunk in enumerate(chunks, start=1):
+        embed = discord.Embed(
+            title=f"Members with role: {role.name}",
+            description="\n".join(f"{idx + 1 + (i - 1) * chunk_size}. {member.mention}" for idx, member in enumerate(chunk)),
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Page {i}/{len(chunks)} • Total: {len(members)} member(s)")
+        await ctx.send(embed=embed)
+
+    await preparing_msg.delete()
+
 
 def load_token(path="bot-token.txt"):
     with open(path, "r") as file:
