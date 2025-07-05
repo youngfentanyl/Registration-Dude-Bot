@@ -4,8 +4,10 @@ import json
 import os
 import re
 import random
+import aiohttp
 from flask import Flask
 import threading
+from datetime import timedelta
 
 app = Flask('')
 
@@ -42,7 +44,7 @@ async def on_ready():
         status=discord.Status.dnd,
         activity=discord.Streaming(
             name="OpenFront.io",
-            url="https://www.twitch.tv/directory/category/openfront"
+            url="https://www.twitch.tv/pastalive"
             )
         )
 
@@ -522,6 +524,87 @@ async def offline(ctx):
             await ctx.send(embed=embed)
 
         await preparing_msg.delete()
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def qualify(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!qualify Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1371850898778751126
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"Team {team_name} just qualified!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.green()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"Qualification worked for **{team_name}**.")
+
+@qualify.error
+async def qualify_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+
+@bot.command()
+async def scrambleteams(ctx, num_groups: int, num_teams: int, *, team_names_raw: str):
+    team_names = [name.strip() for name in team_names_raw.split(",") if name.strip()]
+
+    if num_teams > 128:
+        return await ctx.send("❌ The team limit is 128.")
+    if len(team_names) != num_teams:
+        return await ctx.send(f"❌ You specified {num_teams} teams but provided {len(team_names)} names.")
+
+    random.shuffle(team_names)
+
+    groups = [[] for _ in range(num_groups)]
+    for i, team in enumerate(team_names):
+        groups[i % num_groups].append(team)
+
+    embeds = []
+    for i in range(0, num_groups, 4):
+        embed = discord.Embed(title="Random Team Assignment", color=discord.Color.green())
+        for j in range(4):
+            if i + j < num_groups:
+                group_title = f"Group {i + j + 1}"
+                group_teams = "\n".join(groups[i + j])
+                embed.add_field(name=group_title, value=group_teams or "No teams", inline=False)
+        embeds.append(embed)
+
+    for embed in embeds:
+        await ctx.send(embed=embed)
 
 
 def load_token(path="bot-token.txt"):
