@@ -5,6 +5,7 @@ import os
 import re
 import random
 import aiohttp
+import string
 from flask import Flask
 import threading
 from datetime import timedelta
@@ -14,7 +15,7 @@ app = Flask('')
 
 @app.route('/')
 def home():
-    return "Bot is alive!", 200
+    return "Bot is alive", 200
 
 
 def run():
@@ -26,6 +27,9 @@ threading.Thread(target=run).start()
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.guilds = True
+intents.guild_messages = True
+intents.guild_reactions = True
 
 bot = commands.Bot(command_prefix='r!', intents=intents)
 
@@ -44,7 +48,7 @@ async def on_ready():
         status=discord.Status.dnd,
         activity=discord.Streaming(
             name="OpenFront.io",
-            url="https://www.twitch.tv/pastalive"
+            url="https://www.twitch.tv/directory/category/openfront"
             )
         )
 
@@ -114,8 +118,6 @@ async def summermajor2025(ctx):
 
 
 # Useless for now, will be activate again for next OFM
-
-
 def load_counter():
     if not os.path.exists(COUNTER_FILE):
         return 0
@@ -132,72 +134,101 @@ def save_counter(count):
 team_count = load_counter()
 
 
-# for the automatic registration, read l.108 to understand how it works
+# for the automatic registration
 @bot.command()
-@commands.has_permissions(manage_messages=True)
-async def register(ctx, *, args: str):
-    global team_count
-
-    pattern = r"^(.*?)\/(.*?)\/(.*?)\/(.*?)$"
-    match = re.match(pattern, args)
-    if not match:
-        await ctx.send(
-            "Invalid Format. Use : `r!register Team Name/Tag/Nickname1, Nickname2/Substitue`"
-        )
-        return
-
-    team_name = match.group(1).strip()
-    team_tag = match.group(2).strip()
-    players_raw = match.group(3).strip()
-    substitue = match.group(4).strip()
-
+async def register(ctx, *, args):
     try:
-        player1, player2 = [p.strip() for p in players_raw.split(",", 1)]
-    except ValueError:
-        await ctx.send("Please separate the two players with a comma `,`.")
-        return
+        team_name, team_tag, players_str, subs_str, channel_id_str = [a.strip() for a in args.split('/', 4)]
 
-    team_count += 1
-    save_counter(team_count)
+        players = [p.strip() for p in players_str.split(',')]
+        subs = [s.strip() for s in subs_str.split(',')] if subs_str.lower() != "none" else []
 
-    embed = discord.Embed(title="Registration",
-                          description=(f"**Name:** {team_name}\n"
-                                       f"**Tag:** {team_tag}\n"
-                                       f"**Players:** {player1}, {player2}\n"
-                                       f"**Substitue:** {substitue}"),
-                          color=discord.Color.green())
+        channel_id = int(channel_id_str)
+        target_channel = bot.get_channel(channel_id)
+        if target_channel is None:
+            await ctx.send("❌ Invalid channel ID. Please check and try again.")
+            return
 
-    # Envoi dans le channel d'enregistrement
-    registration_channel = ctx.guild.get_channel(TEAM_REGISTRATION_CHANNEL_ID)
-    if registration_channel:
-        await registration_channel.send(embed=embed)
-        await ctx.send("✅ Registration submitted successfully.")
-    else:
-        await ctx.send("❌ Registration channel not found.")
+        async for msg in target_channel.history(limit=200):
+            if msg.embeds:
+                embed = msg.embeds[0]
+                content = embed.description or ""
+                content_lower = content.lower()
 
-    role_id = 1371850893074501713
-    role = ctx.guild.get_role(role_id)
-    if not role:
-        await ctx.send(
-            "⚠️ Registration complete, but the role could not be found.")
-        return
+                if (team_name.lower() in content_lower or
+                    team_tag.lower() in content_lower or
+                    any(player.lower() in content_lower for player in players)):
+                    await ctx.send("A team with the same name, tag, or one of the players is already registered.")
+                    return
 
-    mentions = ctx.message.mentions
-    if mentions:
-        for user in mentions:
-            try:
-                await user.add_roles(role)
-                await ctx.send(f"✅ {user.mention} has been given the role.")
-            except discord.Forbidden:
-                await ctx.send(
-                    f"❌ I don't have permission to give the role to {user.mention}."
-                )
-    else:
-        await ctx.send(
-            "⚠️ No users were mentioned directly, so no roles were assigned.")
+        embed = discord.Embed(
+            title="New Team Registration",
+            description=(
+                f"**Team Name:** {team_name}\n"
+                f"**Team Tag:** {team_tag}\n"
+                f"**Players:** {', '.join(players)}\n"
+                f"**Substitutes:** {', '.join(subs) if subs else 'None'}"
+            ),
+            color=discord.Color.green()
+        )
+        await target_channel.send(embed=embed)
+        await ctx.send("Registration submitted successfully.")
+
+    except Exception as e:
+        await ctx.send(f"Error: {e}")
+
+# for the automatic clan wars registration
+@bot.command()
+async def registerclan(ctx, *, args):
+    try:
+        clan_name, clan_tag, leader_mention, channel_mention = [a.strip() for a in args.split('/', 3)]
+
+        leader_id = int(leader_mention.strip('<@!>'))
+        leader = await bot.fetch_user(leader_id)
+
+        channel_id = int(channel_mention.strip('<#>'))
+        target_channel = bot.get_channel(channel_id)
+        if target_channel is None:
+            await ctx.send("Invalid channel ID. Please check and try again.")
+            return
+
+        async for msg in target_channel.history(limit=200):
+            if msg.embeds:
+                embed = msg.embeds[0]
+                lines = (embed.description or "").split('\n')
+                existing_name = existing_tag = existing_leader = ""
+
+                for line in lines:
+                    if line.lower().startswith("**clan name:**"):
+                        existing_name = line.split("**Clan Name:**", 1)[1].strip()
+                    elif line.lower().startswith("**clan tag:**"):
+                        existing_tag = line.split("**Clan Tag:**", 1)[1].strip()
+                    elif line.lower().startswith("**leader:**"):
+                        existing_leader = line.split("**Leader:**", 1)[1].strip()
+
+                if (clan_name.lower() == existing_name.lower() or
+                    clan_tag.lower() == existing_tag.lower() or
+                    leader.mention in existing_leader):
+                    await ctx.send("A clan with the same name, tag, or leader is already registered.")
+                    return
+
+        embed = discord.Embed(
+            title="Clan Registration",
+            description=(
+                f"**Clan Name:** {clan_name}\n"
+                f"**Clan Tag:** {clan_tag}\n"
+                f"**Leader:** {leader.mention}\n"
+            ),
+            color=discord.Color.blue()
+        )
+        await target_channel.send(embed=embed)
+        await ctx.send("Clan registered successfully.")
+
+    except Exception as e:
+        await ctx.send(f"Error: {e}")
 
 
-# only usable in #staff-commands channel
+# only usable in #staff-commands channel, copy an emoji
 @bot.command()
 async def copy(ctx, emoji_input: str):
     if ctx.channel.id != 1356604820345196574:
@@ -231,7 +262,7 @@ async def copy(ctx, emoji_input: str):
                 break
     else:
         await ctx.send(
-            "❌ Could not fetch the emoji from Discord CDN. Make sure it's a valid emoji ID."
+            "Could not fetch the emoji from Discord CDN. Make sure it's a valid emoji ID."
         )
         return
 
@@ -239,13 +270,13 @@ async def copy(ctx, emoji_input: str):
         new_emoji = await ctx.guild.create_custom_emoji(name=emoji_name,
                                                         image=image_data)
         await ctx.send(
-            f"✅ Emoji `{new_emoji.name}` added successfully! {new_emoji}")
+            f"Emoji `{new_emoji.name}` added successfully! {new_emoji}")
     except discord.Forbidden:
         await ctx.send(
-            "❌ I don't have permission to add emojis. Make sure I have **Manage Emojis** permission."
+            "I don't have permission to add emojis. Make sure I have **Manage Emojis** permission."
         )
     except discord.HTTPException as e:
-        await ctx.send(f"❌ Failed to add emoji: {str(e)}")
+        await ctx.send(f"Failed to add emoji: {str(e)}")
 
 
 #Command to change the channel #people-in-charge
@@ -264,7 +295,7 @@ async def chargeupdate(ctx):
     guild = ctx.guild
 
     roles_info = [
-        ("Co-Directors", 1355967438704869426),
+        ("Director", 1355967438704869426),
         ("OpenFront Ambassadors", 1355967446741291149),
         ("Administrators", 1355990856099827964),
         ("Moderators", 1355990865163849908),
@@ -304,23 +335,11 @@ async def chargeupdate(ctx):
         if thread is None:
             thread = await bot.fetch_channel(thread_id)
         await thread.send(embed=embed)
-        await ctx.send("✅ Staff update sent to the thread.")
+        await ctx.send("Staff update sent to the thread.")
     except discord.NotFound:
-        await ctx.send("❌ Thread not found.")
+        await ctx.send("Thread not found.")
     except discord.Forbidden:
-        await ctx.send("❌ I don't have permission to access the thread.")
-
-
-@bot.command()
-async def uptime(ctx):
-    embed = discord.Embed(
-        title="Here's my uptime",
-        description=(
-            "I'm online every day from **1PM to 11PM (French time)**.\n"
-            "My commands only work during these hours.\n\n"
-            "Outside of those hours, I might be sleeping 😴"),
-        color=discord.Color.orange())
-    await ctx.send(embed=embed)
+        await ctx.send("I don't have permission to access the thread.")
 
 
 # Command to delete all messages from a specific user in the server
@@ -328,7 +347,7 @@ async def uptime(ctx):
 @commands.has_permissions(manage_messages=True)
 async def purge_user(ctx, member: discord.Member):
     confirm_msg = await ctx.send(
-        f"⚠️ Are you sure you want to delete **all messages** from {member.mention} in the server?\n"
+        f"Are you sure you want to delete **all messages** from {member.mention} in the server?\n"
         "React with ✅ to confirm or ❌ to cancel.")
 
     await confirm_msg.add_reaction("✅")
@@ -432,13 +451,13 @@ async def roleregistration(ctx, role_id: int, member_ids: str):
 async def roleregistration_error(ctx, error):
     if isinstance(error, commands.MissingPermissions):
         await ctx.send(
-            "❌ You need the **Manage Roles** permission to use this command.")
+            "You need the **Manage Roles** permission to use this command.")
     else:
-        await ctx.send("❌ An error occurred. Please check your command syntax."
+        await ctx.send("An error occurred. Please check your command syntax."
                        )
 
 
-    #command r!online and r!offline to indicate if you're playing or not
+#commands r!online and r!offline to indicate if you're playing or not
 @bot.command()
 async def online(ctx, flag: str = None):
     try:
@@ -466,7 +485,7 @@ async def online(ctx, flag: str = None):
         f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
     )
 
-#read l.439 to understand how it works
+#commands r!online and r!offline to indicate if you're playing or not
 @bot.command()
 async def offline(ctx):
     try:
@@ -491,40 +510,37 @@ async def offline(ctx):
         f"[ERREUR] Salon avec l'ID {STATUS_CHANNEL_ID} introuvable dans ce serveur."
     )
 
-    #command to get all members with a specific role
-    @bot.command()
-    async def getrole(ctx, role_id: int):
-        if not ctx.author.guild_permissions.manage_roles:
-            return await ctx.send("❌ Tu n'as pas la permission `Gérer les rôles` pour utiliser cette commande.")
+#command to get all members with a specific role
+@bot.command()
+async def getrole(ctx, *, role: discord.Role):
+    if not ctx.author.guild_permissions.manage_roles:
+        return await ctx.send("You do not have the 'Manage Roles' permission to use this command.")
 
-        role = ctx.guild.get_role(role_id)
-        if not role:
-            return await ctx.send("❌ Rôle introuvable.")
+    members = [member for member in ctx.guild.members if role in member.roles]
 
-        members = [member for member in ctx.guild.members if role in member.roles]
+    if not members:
+        return await ctx.send("No members have this role.")
 
-        if not members:
-            return await ctx.send("❌ Aucun membre ne possède ce rôle.")
+    if len(members) > 400:
+        return await ctx.send("Too many members have this role (over 400).")
 
-        if len(members) > 400:
-            return await ctx.send("⚠️ Impossible de fournir ces informations : trop de membres possèdent ce rôle (plus de 400).")
+    chunk_size = 40
+    chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
 
-        chunk_size = 40
-        chunks = [members[i:i + chunk_size] for i in range(0, len(members), chunk_size)]
+    loading_msg = await ctx.send(f"Preparing {len(chunks)} page(s)...")
 
-        preparing_msg = await ctx.send(f"⏳ Preparing {len(chunks)} embed{'s' if len(chunks) > 1 else ''}...")
+    for i, chunk in enumerate(chunks, start=1):
+        embed = discord.Embed(
+            title=f"Members with role: {role.name}",
+            description="\n".join(f"{idx + 1 + (i - 1) * chunk_size}. {member.mention}" for idx, member in enumerate(chunk)),
+            color=discord.Color.blue()
+        )
+        embed.set_footer(text=f"Page {i}/{len(chunks)} • Total: {len(members)} member(s)")
+        await ctx.send(embed=embed)
 
-        for i, chunk in enumerate(chunks, start=1):
-            embed = discord.Embed(
-                title=f"Members with role: {role.name}",
-                description="\n".join(f"{idx + 1 + (i - 1) * chunk_size}. {member.mention}" for idx, member in enumerate(chunk)),
-                color=discord.Color.blue()
-            )
-            embed.set_footer(text=f"Page {i}/{len(chunks)} • Total: {len(members)} member(s)")
-            await ctx.send(embed=embed)
+    await loading_msg.delete()
 
-        await preparing_msg.delete()
-
+#qualify a user, change the thread ID 
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def qualify(ctx, *, args: str):
@@ -606,6 +622,416 @@ async def scrambleteams(ctx, num_groups: int, num_teams: int, *, team_names_raw:
     for embed in embeds:
         await ctx.send(embed=embed)
 
+@bot.command(name="extractdata")
+async def extractdata(ctx, channel_id: int, keyword: str):
+    try:
+        parent_channel = bot.get_channel(channel_id)
+        if parent_channel is None:
+            await ctx.send("Channel or category not found.")
+            return
+
+        channels_to_check = []
+
+        if isinstance(parent_channel, discord.CategoryChannel):
+            for ch in parent_channel.channels:
+                if isinstance(ch, (discord.TextChannel, discord.ForumChannel)):
+                    channels_to_check.append(ch)
+        elif isinstance(parent_channel, (discord.TextChannel, discord.ForumChannel)):
+            channels_to_check.append(parent_channel)
+        else:
+            await ctx.send("Unsupported channel type.")
+            return
+
+        results = []
+        count = 1
+
+        for channel in channels_to_check:
+            if isinstance(channel, discord.TextChannel):
+                messages = [msg async for msg in channel.history(limit=100)]
+                for message in messages:
+                    if keyword.lower() in message.content.lower():
+                        results.append({
+                            "content": message.content,
+                            "author": message.author.display_name,
+                            "channel": channel.name,
+                            "id": count
+                        })
+                        count += 1
+
+            elif isinstance(channel, discord.ForumChannel):
+                threads = channel.threads
+                for thread in threads:
+                    messages = [msg async for msg in thread.history(limit=100)]
+                    for message in messages:
+                        if keyword.lower() in message.content.lower():
+                            results.append({
+                                "content": message.content,
+                                "author": message.author.display_name,
+                                "channel": f"{channel.name} / {thread.name}",
+                                "id": count
+                            })
+                            count += 1
+
+        if not results:
+            await ctx.send(f'No messages found containing "{keyword}".')
+            return
+
+        embed = discord.Embed(
+            title=f'Results for "{keyword}"',
+            color=discord.Color.blue()
+        )
+
+        for result in results:
+            embed.add_field(
+                name=f'Message {result["id"]} by {result["author"]} in {result["channel"]}',
+                value=result["content"],
+                inline=False
+            )
+
+        await ctx.send(embed=embed)
+
+    except Exception as e:
+        await ctx.send(f'Error: {e}')
+
+
+#give people the "final" role
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def finalpass(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!finalpass Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1393963175984107600  # même rôle que dans qualify
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"Team {team_name} just went to the final!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.gold()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276  # même thread ou tu peux mettre un autre ID
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"Final pass worked for **{team_name}**.")
+
+@finalpass.error
+async def finalpass_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+        
+#same, just for semi-final
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def semipass(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!semipass Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1371850898778751126  # même rôle que dans qualify et finalpass
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"Team {team_name} just qualified for the semi-finals!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276  # même thread ou tu peux mettre un autre ID si besoin
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"Semi-final pass worked for **{team_name}**.")
+
+@semipass.error
+async def semipass_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+
+#announce win of the event
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def winpass(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!winpass Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1371850898778751126 
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"🏆 Team {team_name} just WON the tournament!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.purple()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276 
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"Victory announced for **{team_name}**!")
+
+@winpass.error
+async def winpass_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+        
+#announce second place of the event
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def secondpass(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!secondpass Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1371850898778751126
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"🥈 Team {team_name} takes 2nd place!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.teal()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"2nd place announced for **{team_name}**!")
+
+@secondpass.error
+async def secondpass_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+
+#announce 3rd place for the event
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def thirdpass(ctx, *, args: str):
+    try:
+        team_name, team_tag, players_raw, subs_raw = args.split("/")
+    except ValueError:
+        await ctx.send("Format invalide. Utilisation : `r!thirdpass Nom De La Team/Team Tag/@player1, @player2/@subs or None`")
+        return
+
+    players = [member.strip() for member in players_raw.split(",")]
+    subs = subs_raw.strip()
+
+    members_to_role = []
+    for mention in players:
+        if mention.startswith("<@") and mention.endswith(">"):
+            user_id = int(mention.strip("<@!>"))
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members_to_role.append(member)
+
+    role_id = 1371850898778751126
+    role = ctx.guild.get_role(role_id)
+    if not role:
+        await ctx.send("Le rôle avec l’ID spécifié est introuvable.")
+        return
+
+    for member in members_to_role:
+        try:
+            await member.add_roles(role)
+        except discord.Forbidden:
+            await ctx.send(f"Impossible d’ajouter le rôle à {member.mention} (permissions manquantes).")
+
+    embed = discord.Embed(
+        title=f"🥉 Team {team_name} takes 3rd place!",
+        description=f"**Players:** {', '.join(players)}\n**Substitutes:** {subs}",
+        color=discord.Color.orange()
+    )
+    embed.set_footer(text=f"Tag: {team_tag}")
+
+    thread_id = 1386349293539037276
+    thread = ctx.guild.get_thread(thread_id)
+    if not thread:
+        await ctx.send("Cant find the thread.")
+        return
+
+    await thread.send(embed=embed)
+    await ctx.send(f"3rd place announced for **{team_name}**!")
+
+@thirdpass.error
+async def thirdpass_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("You need to be admin to use this command.")
+
+#for moderators, to warn the chat to change topic
+@bot.command(name="warning")
+@commands.has_permissions(manage_messages=True)
+async def warning(ctx):
+    await ctx.message.delete()
+
+    embed = discord.Embed(
+        title="Formal Warning",
+        description=(
+            "[Community Guidelines](https://discord.com/guidelines/)\n\n"
+            "\n"
+            "> A formal warning has been issued by our moderation team. "
+            "We kindly request that you review the community guidelines to prevent any further escalation of moderation actions."
+        ),
+        color=discord.Color.red()
+    )
+
+    await ctx.send(embed=embed)
+
+#SOTW command, needs administrator perm, to announce the SpeedRun Of The Week
+difficulties = ["Balanced", "Intense", "Impossible"]
+bots_count = [100, 200, 300, 400]
+map_list = [
+    "World", "Giant World Map", "North America", "South America", "Europe",
+    "Europe (Classic)", "Asia", "Africa", "Oceania", "Black Sea", "Britania",
+    "Gateway to the Atlantic", "Between Two Seas", "Iceland", "Japan And Neighbors",
+    "MENA", "Australia", "Faroe Islands", "Falkland Islands", "Baikal", "Halkidiki",
+    "Italia", "Strait Of Gibraltar"
+]
+
+def generate_url(key):
+    cleaned_key = re.sub(r'[^\w\s]', '', key) 
+    formatted_key = cleaned_key.lower().replace(" ", "")
+    return f"https://raw.githubusercontent.com/openfrontio/OpenFrontIO/refs/heads/main/resources/maps/{formatted_key}/thumbnail.webp"
+
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def sotw(ctx, number: int):
+    await ctx.message.delete()
+
+    map_name = random.choice(map_list)
+    difficulty = random.choice(difficulties)
+    bots = random.choice(bots_count)
+    image_url = generate_url(map_name)
+
+    embed = discord.Embed(
+        title=f"SOTW #{number}",
+        color=discord.Color.red()
+    )
+
+    embed.add_field(name="🗺️ Map", value=map_name, inline=True)
+    embed.add_field(name="🎮 Gamemode", value="Free for All", inline=True)
+    embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+    embed.add_field(name="🤖 Bots", value=str(bots), inline=True)
+    embed.add_field(name="🎚️ Difficulty", value=difficulty, inline=True)
+    embed.add_field(name="\u200b", value="\u200b", inline=True)
+
+    embed.add_field(
+        name="\u200b",
+        value="All other Options and Settings must stay as default.",
+        inline=False
+    )
+
+    embed.set_image(url=image_url)
+
+    await ctx.send(embed=embed)
+    
 
 def load_token(path="bot-token.txt"):
     with open(path, "r") as file:
